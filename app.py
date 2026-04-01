@@ -15,14 +15,14 @@ from scipy.spatial import cKDTree
 BUCKET_NAME = 'projeto-us-validacao-william'
 PREFIXO_S3 = 'Imagens_Processadas/BHC/'
 
-PASTA_MODELOS = './modelo'
 PASTA_IMAGENS = './Imagens_US'
 PASTA_RELATORIOS = './relatorios'
 
+# Modelo único, mesmo diretório do app.py
+MODELO_YOLO = 'best_alma_1.pt'
+
 LIMITES_DEPTH = {
-    'boleto': (0, 52),
-    'alma': (53, 179),
-    'patim': (180, 223)
+    'alma': (53, 179)
 }
 
 # ================= UI =================
@@ -78,10 +78,12 @@ def gerar_imagem(df, nome):
 # YOLO
 # =========================================
 def rodar_yolo():
-    # Caminho direto do modelo que você quer usar
-    model_path = os.path.join(PASTA_MODELOS, "best_alma_1.pt")
-    model = YOLO(model_path)
+    # Confirma se o arquivo do modelo existe
+    if not os.path.exists(MODELO_YOLO):
+        st.error(f"Modelo não encontrado: {MODELO_YOLO}")
+        return pd.DataFrame(columns=["imagem", "classe", "secao"])
 
+    model = YOLO(MODELO_YOLO)
     resultados = []
 
     for root, _, files in os.walk(PASTA_IMAGENS):
@@ -97,25 +99,22 @@ def rodar_yolo():
                     resultados.append({
                         "imagem": img_name,
                         "classe": model.names[int(box.cls)],
-                        "secao": "alma"   # já que é sempre esse modelo
+                        "secao": "alma"
                     })
 
     if resultados:
         return pd.DataFrame(resultados)
     else:
-        return pd.DataFrame(columns=["imagem","classe","secao"])
+        return pd.DataFrame(columns=["imagem", "classe", "secao"])
 
 # =========================================
 # BOTÕES
 # =========================================
-
-# Baixar e extrair dados do S3
 if st.button("📥 Baixar dados do S3"):
     baixar_s3()
     extrair_zip()
     st.success("Download e extração concluídos!")
 
-# Upload CSV
 uploaded_file = st.file_uploader("📂 Envie CSV")
 
 if uploaded_file:
@@ -130,7 +129,6 @@ if uploaded_file:
         gerar_imagem(df, "saida.png")
         st.image("saida.png")
 
-# Rodar YOLO
 if st.button("🧠 Rodar YOLO"):
     with st.spinner("Executando inferência YOLO..."):
         df_res = rodar_yolo()
