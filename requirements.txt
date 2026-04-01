@@ -3,4 +3,7 @@ ultralytics
 opencv-python-headless
 pandas
 numpy
+matplotlib
+seaborn
+scipy
 boto3
