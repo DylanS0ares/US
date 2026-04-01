@@ -3,30 +3,29 @@ import os
 import pandas as pd
 import numpy as np
 import cv2
-import zipfile
 from ultralytics import YOLO
 from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.spatial import cKDTree
+import zipfile
 
 # ================= CONFIG =================
-PASTA_MODELOS = './modelo'
+PASTA_MODELOS = './'  # modelo está na mesma pasta do app.py
 PASTA_IMAGENS = './Imagens_US'
 PASTA_RELATORIOS = './relatorios'
 
+MODELO_YOLO = 'best_alma_1.pt'  # nome exato do modelo
+LIMITES_DEPTH = {
+    'alma': (53, 179)  # apenas a seção alma
+}
+
 # ================= UI =================
-st.title("🚄 Pipeline US + YOLO (modelo best_alma_1.pt)")
+st.title("🚄 Pipeline US + YOLO Local")
 
 # =========================================
-# FUNÇÕES
+# PROCESSAMENTO CSV
 # =========================================
-def extrair_zip(file):
-    os.makedirs(PASTA_IMAGENS, exist_ok=True)
-    with zipfile.ZipFile(file, 'r') as zip_ref:
-        zip_ref.extractall(PASTA_IMAGENS)
-    st.success("ZIP extraído!")
-
 def preprocessar(df):
     df['odo'] = (df['odo'] * 1000000).astype(int)
     df = df[df['level'] > 450]
@@ -46,65 +45,79 @@ def gerar_imagem(df, nome):
     plt.savefig(nome)
     plt.close()
 
+# =========================================
+# YOLO
+# =========================================
 def rodar_yolo():
-    model_path = os.path.join(PASTA_MODELOS, "best_alma_1.pt")
-    model = YOLO(model_path)
+    model_path = os.path.join(PASTA_MODELOS, MODELO_YOLO)
+    if not os.path.exists(model_path):
+        st.error(f"Modelo não encontrado: {model_path}")
+        return pd.DataFrame()
+
     resultados = []
 
     for root, _, files in os.walk(PASTA_IMAGENS):
         for img_name in files:
-            if not img_name.lower().endswith((".jpg",".png")):
+            if not img_name.lower().endswith((".jpg", ".png")):
                 continue
 
             img_path = os.path.join(root, img_name)
+            model = YOLO(model_path)
             res = model.predict(img_path, verbose=False)
 
             for r in res:
                 for box in r.boxes:
                     resultados.append({
                         "imagem": img_name,
-                        "classe": model.names[int(box.cls)]
+                        "classe": model.names[int(box.cls)],
+                        "secao": "alma"
                     })
 
     if resultados:
         return pd.DataFrame(resultados)
     else:
-        return pd.DataFrame(columns=["imagem","classe"])
+        return pd.DataFrame(columns=["imagem","classe","secao"])
 
 # =========================================
-# UPLOAD E PROCESSAMENTO
+# UPLOAD CSV
 # =========================================
-uploaded_zip = st.file_uploader("📂 Envie ZIP com imagens", type="zip")
-if uploaded_zip:
-    extrair_zip(uploaded_zip)
+uploaded_file = st.file_uploader("📂 Envie CSV para processar")
 
-uploaded_csv = st.file_uploader("📂 Envie CSV")
-if uploaded_csv:
-    df = pd.read_csv(uploaded_csv)
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
     df = preprocessar(df)
     df = remover_isolados(df)
-    st.write("Dados processados:")
+
+    st.write("✅ Dados processados:")
     st.dataframe(df.head())
 
-    if st.button("📊 Gerar imagem"):
+    if st.button("📊 Gerar gráfico"):
         gerar_imagem(df, "saida.png")
         st.image("saida.png")
 
-# RODAR YOLO
+# =========================================
+# BOTÃO YOLO
+# =========================================
 if st.button("🧠 Rodar YOLO"):
-    with st.spinner("Executando inferência YOLO..."):
-        df_res = rodar_yolo()
-    st.write(df_res)
+    if not os.path.exists(PASTA_IMAGENS):
+        st.warning(f"Pasta de imagens não encontrada: {PASTA_IMAGENS}")
+    else:
+        with st.spinner("Executando inferência YOLO..."):
+            df_res = rodar_yolo()
+            st.write(df_res)
 
-    os.makedirs(PASTA_RELATORIOS, exist_ok=True)
-    path = os.path.join(PASTA_RELATORIOS, f"resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
-    df_res.to_csv(path, index=False)
+            os.makedirs(PASTA_RELATORIOS, exist_ok=True)
+            nome_csv = f"resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            path = os.path.join(PASTA_RELATORIOS, nome_csv)
+            df_res.to_csv(path, index=False)
 
-    # Botão de download
-    with open(path, "rb") as f:
-        st.download_button(
-            label="⬇️ Baixar CSV",
-            data=f,
-            file_name=os.path.basename(path),
-            mime="text/csv"
-        )
+            st.success(f"Inferência concluída! CSV salvo em {path}")
+
+            # botão para baixar o CSV
+            with open(path, "rb") as f:
+                st.download_button(
+                    label="⬇️ Baixar CSV",
+                    data=f,
+                    file_name=nome_csv,
+                    mime="text/csv"
+                )
