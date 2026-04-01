@@ -5,7 +5,6 @@ import numpy as np
 import cv2
 import zipfile
 import boto3
-import shutil
 from ultralytics import YOLO
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -79,6 +78,7 @@ def gerar_imagem(df, nome):
 # YOLO
 # =========================================
 def rodar_yolo():
+    # Carregar todos os modelos da pasta
     modelos = {}
     for file in os.listdir(PASTA_MODELOS):
         if file.endswith(".pt"):
@@ -90,12 +90,13 @@ def rodar_yolo():
 
     for root, _, files in os.walk(PASTA_IMAGENS):
         for img_name in files:
-            if not img_name.endswith((".jpg",".png")):
+            if not img_name.lower().endswith((".jpg",".png")):
                 continue
 
             img_path = os.path.join(root, img_name)
 
             for secao, model_path in modelos.items():
+                # Carrega o modelo YOLO
                 model = YOLO(model_path)
                 res = model.predict(img_path, verbose=False)
 
@@ -103,20 +104,26 @@ def rodar_yolo():
                     for box in r.boxes:
                         resultados.append({
                             "imagem": img_name,
-                            "classe": model.names[int(box.cls)]
+                            "classe": model.names[int(box.cls)],
+                            "secao": secao
                         })
 
-    return pd.DataFrame(resultados)
+    if resultados:
+        return pd.DataFrame(resultados)
+    else:
+        return pd.DataFrame(columns=["imagem","classe","secao"])
 
 # =========================================
 # BOTÕES
 # =========================================
 
+# Baixar e extrair dados do S3
 if st.button("📥 Baixar dados do S3"):
     baixar_s3()
     extrair_zip()
-    st.success("Download concluído!")
+    st.success("Download e extração concluídos!")
 
+# Upload CSV
 uploaded_file = st.file_uploader("📂 Envie CSV")
 
 if uploaded_file:
@@ -131,12 +138,14 @@ if uploaded_file:
         gerar_imagem(df, "saida.png")
         st.image("saida.png")
 
+# Rodar YOLO
 if st.button("🧠 Rodar YOLO"):
-    df_res = rodar_yolo()
+    with st.spinner("Executando inferência YOLO..."):
+        df_res = rodar_yolo()
     st.write(df_res)
 
     os.makedirs(PASTA_RELATORIOS, exist_ok=True)
-    path = os.path.join(PASTA_RELATORIOS, "resultado.csv")
+    path = os.path.join(PASTA_RELATORIOS, f"resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
     df_res.to_csv(path, index=False)
 
-    st.success("Inferência concluída!")
+    st.success(f"Inferência concluída! CSV salvo em {path}")
