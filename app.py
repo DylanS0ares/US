@@ -78,35 +78,27 @@ def gerar_imagem(df, nome):
 # YOLO
 # =========================================
 def rodar_yolo():
-    # Carregar todos os modelos da pasta
-    modelos = {}
-    for file in os.listdir(PASTA_MODELOS):
-        if file.endswith(".pt"):
-            for secao in LIMITES_DEPTH:
-                if secao in file.lower():
-                    modelos[secao] = os.path.join(PASTA_MODELOS, file)
+    # Caminho direto do modelo que você quer usar
+    model_path = os.path.join(PASTA_MODELOS, "best_alma_1.pt")
+    model = YOLO(model_path)
 
     resultados = []
 
     for root, _, files in os.walk(PASTA_IMAGENS):
         for img_name in files:
-            if not img_name.lower().endswith((".jpg",".png")):
+            if not img_name.lower().endswith((".jpg", ".png")):
                 continue
 
             img_path = os.path.join(root, img_name)
+            res = model.predict(img_path, verbose=False)
 
-            for secao, model_path in modelos.items():
-                # Carrega o modelo YOLO
-                model = YOLO(model_path)
-                res = model.predict(img_path, verbose=False)
-
-                for r in res:
-                    for box in r.boxes:
-                        resultados.append({
-                            "imagem": img_name,
-                            "classe": model.names[int(box.cls)],
-                            "secao": secao
-                        })
+            for r in res:
+                for box in r.boxes:
+                    resultados.append({
+                        "imagem": img_name,
+                        "classe": model.names[int(box.cls)],
+                        "secao": "alma"   # já que é sempre esse modelo
+                    })
 
     if resultados:
         return pd.DataFrame(resultados)
