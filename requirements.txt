@@ -1,9 +1,10 @@
 streamlit
-ultralytics
 opencv-python-headless
+ultralytics
+openvino
 pandas
 numpy
+scipy
 matplotlib
 seaborn
-scipy
-boto3
+openpyxl
